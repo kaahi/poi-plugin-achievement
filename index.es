@@ -17,7 +17,7 @@ import {
 */
 
 import {
-  getDateNo,getRankDateNo,
+  getDateNo,getRankDateNo,getRankCutoffTime,
   fs,exlist,exvalue,dayofMonth,MAGIC_L_NUMS,MAGIC_R_NUMS,
   findSenkaMagicNum,
 } from './lib/util'
@@ -233,7 +233,8 @@ export const reactClass = connect(
 
     const now = new Date()
     if(path=="/kcsapi/api_req_quest/clearitemget"){
-      let requestId = this.state.zId.indexOf(postBody.api_request_id)
+      // poi delivers postBody values as strings; zId holds numbers
+      let requestId = this.state.zId.indexOf(parseInt(postBody.api_request_id, 10))
       if(requestId>-1){
         let es = this.state.extraSenkalist.slice()
         let zcts = this.state.zcleartslist.slice()
@@ -302,6 +303,16 @@ export const reactClass = connect(
             achieve.fensureuex=achieve.tensureuex
             achieve.fensureexp=achieve.tensureexp
             achieve.exphis[dateno] = achieve.tensureexp
+          }else if(getRankDateNo(now)>getRankDateNo(new Date(achieve.fensurets))){
+            // the 14:00/02:00 JST snapshot was missed (poi not running);
+            // rebuild the baseline from the first exp seen in this period
+            const periodExp = achieve.exphis[getDateNo(now)]
+            if(periodExp>0){
+              achieve.fensuresenka=senka
+              achieve.fensureexp=periodExp
+              achieve.fensureuex=achieve.rankuex
+              achieve.fensurets=getRankCutoffTime(now)
+            }
           }else{
             const ensuresenka=achieve.fensuresenka
             const ensureexp = achieve.fensureexp

@@ -23,6 +23,18 @@ export const getRankDateNo = (now) =>{
   return no;
 }
 
+// ranking cutoff (14:00 / 02:00 JST) of the ranking period containing `now`
+export const getRankCutoffTime = (now) =>{
+  let x = new Date();
+  x.setUTCDate(0);
+  x.setUTCHours(18);
+  x.setUTCMinutes(0);
+  x.setUTCSeconds(0);
+  x.setUTCMilliseconds(0);
+  const no = getRankDateNo(now);
+  return new Date(x.getTime() + no*43200000 - 3600000);
+}
+
 export const senkaOfDay = (exphis,tmpexp,tmpno) => {
   const hiskey = Object.keys(exphis).sort((a, b) => parseInt(a) - parseInt(b))
   let lastkey = hiskey[0]
