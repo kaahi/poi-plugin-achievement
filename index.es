@@ -233,8 +233,8 @@ export const reactClass = connect(
 
     const now = new Date()
     if(path=="/kcsapi/api_req_quest/clearitemget"){
-      // poi delivers postBody values as strings; zId holds numbers
-      let requestId = this.state.zId.indexOf(parseInt(postBody.api_request_id, 10))
+      // the claim request carries api_quest_id (not api_request_id) as a string; zId holds numbers
+      let requestId = this.state.zId.indexOf(parseInt(postBody.api_quest_id, 10))
       if(requestId>-1){
         let es = this.state.extraSenkalist.slice()
         let zcts = this.state.zcleartslist.slice()
