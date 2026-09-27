@@ -28,6 +28,10 @@ import {
 
 import { debug } from './debug'
 
+// senka quest ids, index-aligned with zValue / zName
+//   854 Z作戦前段, 888 三川艦隊, 893 泊地周辺, 872 Z作戦後段, 284 海上護衛強化月間, 845 西方海域作戦, 903 拡張「六水戦」
+const DEFAULT_ZID = [854,888,893,872,284,845,903]
+
 // make sure the directory exists and return file path to achieve.json
 const getAchieveFilePath = () => {
   const {APPDATA_PATH} = window
@@ -90,8 +94,10 @@ const mkInitState = props => ({
   fensureuex:exlist,
   zcleartslist: [0,0,0,0,0,0,0],
   extraSenkalist: [1,1,1,1,1,1,1],
-  zId: [854,888,893,666666,284,666666,666666],
+  zId: DEFAULT_ZID.slice(),
   zValue: [350,200,300,400,80,330,390],
+  zSeenList: [0,0,0,0,0,0,0],   // last time each senka quest was seen accepted (state>=2), 0 = not accepted
+  zTypeList: [0,0,0,0,0,0,0],   // api_type of each senka quest, learnt from questlist
   zName: ['Z作战前','三川','泊地警戒','Z作戦後','海上警備','西方','六水戦'],
   checksum:484764,  //2017.6.5
 
@@ -141,7 +147,9 @@ export const reactClass = connect(
       achieve.rankuex=exlist
       achieve.extraSenkalist=[1,1,1,1,1,1,1]
       achieve.zcleartslist=[0,0,0,0,0,0,0]
-      achieve.zId=[854,888,893,666666,284,666666,666666], // I don't know some of the request Id of senka mission
+      achieve.zId=DEFAULT_ZID.slice(),
+      achieve.zSeenList=[0,0,0,0,0,0,0],
+      achieve.zTypeList=[0,0,0,0,0,0,0],
       achieve.zValue=[350,200,300,400,80,330,390],
       achieve.zName=['Z作战前','三川','泊地警戒','Z作戦後','海上警備','西方','六水戦']
       achieve.r5his={}
@@ -238,15 +246,20 @@ export const reactClass = connect(
       if(requestId>-1){
         let es = this.state.extraSenkalist.slice()
         let zcts = this.state.zcleartslist.slice()
+        let zseen = this.state.zSeenList.slice()
         es[requestId] = 2
+        zseen[requestId] = 0
 
         if(now.getDate()==1&&now.getHours()<4){
-          this.setState({extraSenkalist:es})
+          this.setState({extraSenkalist:es,zSeenList:zseen},()=>this.savelist())
         }else{
           zcts[requestId] = new Date()
-          this.setState({extraSenkalist:es,zcleartslist:zcts})
+          this.setState({extraSenkalist:es,zcleartslist:zcts,zSeenList:zseen},()=>this.savelist())
         }
       }
+    }
+    if(path=="/kcsapi/api_get_member/questlist"){
+      this.checkQuestState(body.api_list||[], postBody, now)
     }
     if(path=="/kcsapi/api_req_ranking/mxltvkpyuklh"){
       const myname = this.props.basic.api_nickname
@@ -366,6 +379,48 @@ export const reactClass = connect(
     }
   }
 
+  // State-based detection of senka quests from the quest list (like EX maps,
+  // which are read from map state instead of caught as an event).
+  //  - state 2/3 (accepted / achieved): remember when it was last seen
+  //  - state 3: treat as achieved for the calculator
+  //  - previously accepted, now missing from a list that should contain it
+  //    (tab 0 = all, or the tab matching its api_type): it was claimed while
+  //    poi was not watching. The claim happened after the last sighting, so
+  //    stamp the clear with that time; this never over-counts the bonus.
+  checkQuestState(list, postBody, now){
+    const zId = this.state.zId
+    const es = this.state.extraSenkalist.slice()
+    const zcts = this.state.zcleartslist.slice()
+    const zseen = this.state.zSeenList.slice()
+    const ztype = this.state.zTypeList.slice()
+    const tab = (postBody && postBody.api_tab_id != null) ? parseInt(postBody.api_tab_id, 10) : NaN
+    const listed = {}
+    list.forEach(q => { if(q && q.api_no != null) listed[q.api_no] = q })
+    let changed = false
+    zId.forEach((id, k) => {
+      const q = listed[id]
+      if(q){
+        const state = parseInt(q.api_state, 10)
+        const type = parseInt(q.api_type, 10)
+        if(type>0 && ztype[k]!==type){ ztype[k]=type; changed=true }
+        if(state>=2){
+          zseen[k]=now.getTime(); changed=true
+          if(state===3 && es[k]!==2){ es[k]=2 }
+        }else if(zseen[k]){
+          zseen[k]=0; changed=true   // abandoned, back to unselected
+        }
+      }else if(zseen[k] && !zcts[k] && (tab===0 || tab===ztype[k])){
+        es[k]=2
+        zcts[k]=new Date(zseen[k])
+        zseen[k]=0
+        changed=true
+      }
+    })
+    if(changed){
+      this.setState({extraSenkalist:es,zcleartslist:zcts,zSeenList:zseen,zTypeList:ztype},()=>this.savelist())
+    }
+  }
+
   componentDidMount = () => {
     window.addEventListener('game.response', this.handleResponse)
     this.loadlist()
@@ -401,6 +456,9 @@ export const reactClass = connect(
           }
         })
         data.zcleartslist = zcts2
+        if(Array.isArray(data.zId)){
+          data.zId = data.zId.map((id, i) => (id===666666 && DEFAULT_ZID[i]) ? DEFAULT_ZID[i] : id)
+        }
         if(new Date().getDate()>2&&new Date().getDay()<20){
           delete(data.exphis[58])
           delete(data.exphis[59])
