@@ -382,7 +382,7 @@ export const reactClass = connect(
   // State-based detection of senka quests from the quest list (like EX maps,
   // which are read from map state instead of caught as an event).
   //  - state 2/3 (accepted / achieved): remember when it was last seen
-  //  - state 3: treat as achieved for the calculator
+  //  - state 3: treat as achieved and add its senka to the prediction
   //  - previously accepted, now missing from a list that should contain it
   //    (tab 0 = all, or the tab matching its api_type): it was claimed while
   //    poi was not watching. The claim happened after the last sighting, so
@@ -405,13 +405,21 @@ export const reactClass = connect(
         if(type>0 && ztype[k]!==type){ ztype[k]=type; changed=true }
         if(state>=2){
           zseen[k]=now.getTime(); changed=true
-          if(state===3 && es[k]!==2){ es[k]=2 }
+          if(state===3){
+            // achieved: count its senka in the prediction right away (stamped
+            // with the sighting time); the claim hook overwrites with the
+            // exact claim time when poi sees it
+            es[k]=2
+            if(!zcts[k] && !(now.getDate()==1&&now.getHours()<4)){ zcts[k]=new Date(now.getTime()) }
+          }
         }else if(zseen[k]){
           zseen[k]=0; changed=true   // abandoned, back to unselected
         }
-      }else if(zseen[k] && !zcts[k] && (tab===0 || tab===ztype[k])){
-        es[k]=2
-        zcts[k]=new Date(zseen[k])
+      }else if(zseen[k] && (tab===0 || tab===ztype[k])){
+        if(!zcts[k]){
+          es[k]=2
+          zcts[k]=new Date(zseen[k])
+        }
         zseen[k]=0
         changed=true
       }
